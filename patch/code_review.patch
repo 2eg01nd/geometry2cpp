@@ -1,0 +1,503 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3fa8a7a..bad84b7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,6 +1,8 @@
+ cmake_minimum_required(VERSION 3.10.0)
+ project(geometry2d VERSION 0.1.0 LANGUAGES C CXX)
+ 
++add_definitions(-DAPP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
++
+ add_executable(geometry2d
+     geometry2d.h
+     geometry2d.cpp
+diff --git a/geometry2d.cpp b/geometry2d.cpp
+index 7c365d0..feea80a 100644
+--- a/geometry2d.cpp
++++ b/geometry2d.cpp
+@@ -1,21 +1,69 @@
+ #include "geometry2d.h"
+ 
+ #include <fstream>
++#include <iostream>
+ 
+ using namespace geometry2d;
+ 
+-Point::Point(double x, double y) : x(x), y(y){};
++// Delete unnecessary comments later
+ 
+-ShapeType Point::type() { return ShapeType::POINT; }
++// Separate implementation of methods for forms for better readability
++// !!! Using code style or automatic formatting, such as .clang-format
+ 
++Point::Point()
++  : m_x(0.0)
++  , m_y(0.0)
++{}
++
++Point::Point(double x, double y) 
++  : m_x(x)
++  , m_y(y)
++{}
++
++ShapeType Point::type()
++{ 
++  return ShapeType::POINT; 
++}
++
++double Point::x() const
++{
++  return m_x;
++}
++
++void Point::setX(const double x)
++{
++  if (x == m_x)
++    return;
++  m_x = x;
++}
++
++double Point::y() const
++{
++  return m_y;
++}
++
++void Point::setY(const double y)
++{
++  if (y == m_y)
++    return;
++  m_y = y;
++}
++
++//-------------------------------------------------------------------------------------
++// Code style
+ LineSegment::LineSegment(Point p1, Point p2) : p1(p1), p2(p2){};
+ 
+ ShapeType LineSegment::type() { return ShapeType::LINE; }
+ 
++//-------------------------------------------------------------------------------------
++// Code style
+ Arc::Arc(Point c, Point p1, Point p2) : c(c), p1(p1), p2(p2){};
+ 
+ ShapeType Arc::type() { return ShapeType::ARC; }
+ 
++
++//-------------------------------------------------------------------------------------
++// Usage smart pointer instead of raw pointers.
+ Shape* GeometryFactory::createShape(double x, double y) const {
+   return new Point(x, y);
+ };
+@@ -26,6 +74,11 @@ Shape* GeometryFactory::createShape(Point c, Point p1, Point p2) const {
+   return new Arc(c, p1, p2);
+ }
+ 
++//-------------------------------------------------------------------------------------
++// Incorrectly specified coordinates have not been considered
++// Option with wrong type of form has not been considered
++// Usage smart pointer instead of raw pointers.
++
+ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+                                              std::istream& stream) {
+   std::vector<Shape*> result;
+@@ -52,7 +105,7 @@ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+           continue;
+         }
+ 
+-        if (point->x == coords[0] && point->y == coords[1]) {
++        if (point->x() == coords[0] && point->y() == coords[1]) {
+           found = true;
+           break;
+         }
+@@ -66,8 +119,8 @@ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+         auto line = dynamic_cast<LineSegment*>(result[i]);
+ 
+         if (line) {
+-          if (line->p1.x == coords[0] && line->p1.y == coords[1] &&
+-              line->p2.x == coords[2] && line->p2.y == coords[2]) {
++          if (line->p1.x() == coords[0] && line->p1.y() == coords[1] &&
++              line->p2.x() == coords[2] && line->p2.y() == coords[2]) {
+             found = true;
+             break;
+           }
+@@ -83,9 +136,9 @@ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+         auto arc = dynamic_cast<Arc*>(result[i]);
+ 
+         if (arc) {
+-          if (arc->c.x == coords[0] && arc->c.y == coords[1] &&
+-              arc->p1.x == coords[2] && arc->p1.y == coords[3] &&
+-              arc->p2.x == coords[4] && arc->p2.y == coords[5]) {
++          if (arc->c.x() == coords[0] && arc->c.y() == coords[1] &&
++              arc->p1.x() == coords[2] && arc->p1.y() == coords[3] &&
++              arc->p2.x() == coords[4] && arc->p2.y() == coords[5]) {
+             found = true;
+             break;
+           }
+@@ -101,45 +154,72 @@ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+   return result;
+ }
+ 
++// file existence check
++// file opening check
+ std::vector<Shape*> geometry2d::readGeometry(const IGeometryFactory* factory,
+                                              const std::filesystem::path& path)
+-
+ {
+-  std::ifstream fs(path);
+-  return geometry2d::readGeometry(factory, fs);
++
++  if (!std::filesystem::exists(path)) {
++    std::cerr << "Файл не существует: " << path << std::endl;
++    return {};
++  }
++
++  std::ifstream ifs(path);
++  if (!ifs.is_open()) {
++    std::cerr << "Не удалось открыть файл: " << path << std::endl;
++    return {};
++  }
++
++  return geometry2d::readGeometry(factory, ifs);
+ }
+ 
++// Output in case of empty vector()
+ Point geometry2d::centroid(const std::vector<Shape*>& shapes) {
+   Point p(0, 0);
+ 
+   for (int i = 0; i < shapes.size(); ++i) {
+     if (shapes[i]->type() == ShapeType::POINT) {
+-      p.x += dynamic_cast<Point*>(shapes[i])->x;
+-      p.y += dynamic_cast<Point*>(shapes[i])->y;
++      p.setX(p.x() + dynamic_cast<Point*>(shapes[i])->x());
++      p.setY(p.y() + dynamic_cast<Point*>(shapes[i])->y());
+     }
+ 
+     if (shapes[i]->type() == ShapeType::LINE) {
+-      p.x += dynamic_cast<LineSegment*>(shapes[i])->p1.x;
+-      p.y += dynamic_cast<LineSegment*>(shapes[i])->p1.y;
+-
+-      p.x += dynamic_cast<LineSegment*>(shapes[i])->p2.x;
+-      p.y += dynamic_cast<LineSegment*>(shapes[i])->p2.y;
++      //p.x += dynamic_cast<LineSegment*>(shapes[i])->p1.x;
++      //p.y += dynamic_cast<LineSegment*>(shapes[i])->p1.y;
++      p.setX(p.x() + dynamic_cast<LineSegment*>(shapes[i])->p1.x());
++      p.setY(p.y() + dynamic_cast<LineSegment*>(shapes[i])->p1.y());
++
++      //p.x += dynamic_cast<LineSegment*>(shapes[i])->p2.x;
++      //p.y += dynamic_cast<LineSegment*>(shapes[i])->p2.y;
++      p.setX(p.x() + dynamic_cast<LineSegment*>(shapes[i])->p2.x());
++      p.setY(p.y() + dynamic_cast<LineSegment*>(shapes[i])->p2.y());
+     }
+ 
+     if (shapes[i]->type() == ShapeType::ARC) {
+-      p.x += dynamic_cast<Arc*>(shapes[i])->p1.x;
+-      p.y += dynamic_cast<Arc*>(shapes[i])->p1.y;
+-
+-      p.x += dynamic_cast<Arc*>(shapes[i])->p1.x;
+-      p.y += dynamic_cast<Arc*>(shapes[i])->p1.y;
+-
+-      p.x += dynamic_cast<Arc*>(shapes[i])->c.x;
+-      p.y += dynamic_cast<Arc*>(shapes[i])->c.y;
++      //p.x += dynamic_cast<Arc*>(shapes[i])->p1.x;
++      //p.y += dynamic_cast<Arc*>(shapes[i])->p1.y;
++      p.setX(p.x() + dynamic_cast<Arc*>(shapes[i])->p1.x());
++      p.setY(p.y() + dynamic_cast<Arc*>(shapes[i])->p1.y());
++
++      // Error. Need p2
++      //p.x += dynamic_cast<Arc*>(shapes[i])->p1.x;
++      //p.y += dynamic_cast<Arc*>(shapes[i])->p1.y;
++      p.setX(p.x() + dynamic_cast<Arc*>(shapes[i])->p2.x());
++      p.setY(p.y() + dynamic_cast<Arc*>(shapes[i])->p2.y());
++
++      //p.x += dynamic_cast<Arc*>(shapes[i])->c.x;
++      //p.y += dynamic_cast<Arc*>(shapes[i])->c.y;
++      p.setX(p.x() + dynamic_cast<Arc*>(shapes[i])->c.x());
++      p.setY(p.y() + dynamic_cast<Arc*>(shapes[i])->c.y());
+     }
+   }
+ 
+-  p.x /= shapes.size();
+-  p.y /= shapes.size();
++  //p.x /= shapes.size();
++  //p.y /= shapes.size();
++  // check divide-by-zero
++  p.setX(p.x() / shapes.size());
++  p.setY(p.y() / shapes.size());
+ 
+   return p;
+ }
+@@ -147,20 +227,32 @@ Point geometry2d::centroid(const std::vector<Shape*>& shapes) {
+ ShapeType BoundingBox::type() { return ShapeType::BOX; }
+ 
+ void BoundingBox::add(Point p) {
+-  if (p.x < p1.x) {
+-    p1.x = p.x;
++  //if (p.x < p1.x) {
++  //  p1.x = p.x;
++  //}
++  if (p.x() < p1.x()) {
++    p1.setX(p.x());
+   }
+ 
+-  if (p.y < p1.y) {
+-    p1.y = p.y;
++  //if (p.y < p1.y) {
++  //  p1.y = p.y;
++  //}
++  if (p.y() < p1.y()) {
++    p1.setY(p.y());
+   }
+ 
+-  if (p.x > p2.x) {
+-    p.x = p2.x;
++  //if (p.x > p2.x) {
++  //  p.x = p2.x;
++  //}
++  if (p.x() < p2.x()) {
++    p2.setX(p.x());
+   }
+ 
+-  if (p.y > p2.y) {
+-    p.y = p2.y;
++  //if (p.y > p2.y) {
++  //  p.y = p2.y;
++  //}
++  if (p.y() < p2.y()) {
++    p2.setY(p.y());
+   }
+ }
+ 
+@@ -175,7 +267,66 @@ void BoundingBox::add(Arc arc) {
+   add(arc.p2);
+ }
+ 
+-Point* Intersect::intersect(LineSegment l1, LineSegment l2) { return nullptr; }
+-Point* Intersect::intersect(LineSegment segment, Arc arc) { return nullptr; }
+-Point* Intersect::intersect(Point p, LineSegment l) { return nullptr; }
+-Point* Intersect::intersect(Point p, Arc l) { return nullptr; }
++// Empty implementations
++// Point* Intersect::intersect(LineSegment l1, LineSegment l2) { return nullptr; }
++// Point* Intersect::intersect(LineSegment segment, Arc arc) { return nullptr; }
++// Point* Intersect::intersect(Point p, LineSegment l) { return nullptr; }
++// Point* Intersect::intersect(Point p, Arc l) { return nullptr; }
++
++Point IntersectLineSegment::intersect(Shape *p1, Shape *p2)
++{
++  const auto line1 = dynamic_cast<LineSegment*>(p1);
++  const auto line2 = dynamic_cast<LineSegment*>(p2);
++  return intersectOnSegments(line1->p1, line1->p2, line2->p1, line2->p2);
++}
++
++int IntersectLineSegment::orientation(Point p, Point q, Point r) {
++  double val = (q.y() - p.y()) * (r.x() - q.x()) - (q.x() - p.x()) * (r.y() - q.y());
++  if (std::abs(val) < 1e-9) return 0;
++  return (val > 0) ? 1 : 2;
++}
++
++bool IntersectLineSegment::isSegment(Point p, Point q, Point r) {
++  return (q.x() <= std::max(p.x(), r.x()) && q.x() >= std::min(p.x(), r.x()) &&
++          q.y() <= std::max(p.y(), r.y()) && q.y() >= std::min(p.y(), r.y()));
++}
++
++Point IntersectLineSegment::intersectOnSegments(Point l1p1, Point l1p2, Point l2p1, Point l2p2) {
++  Point intersection;
++  int o1 = orientation(l1p1, l1p2, l2p1);
++  int o2 = orientation(l1p1, l1p2, l2p2);
++  int o3 = orientation(l2p1, l2p2, l1p1);
++  int o4 = orientation(l2p1, l2p2, l1p2);
++
++  if (o1 != o2 && o3 != o4) {
++      double denominator = (l1p2.x() - l1p1.x()) * (l2p2.y() - l2p1.y()) - (l1p2.y() - l1p1.y()) * (l2p2.x() - l2p1.x());
++      if (std::abs(denominator) < 1e-9) {
++          return {};
++      }
++      double t = ((l2p1.x() - l1p1.x()) * (l2p2.y() - l2p1.y()) - (l2p1.y() - l1p1.y()) * (l2p2.x() - l2p1.x())) / denominator;
++      double u = ((l2p1.x() - l1p1.x()) * (l1p2.y() - l1p1.y()) - (l2p1.y() - l1p1.y()) * (l1p2.x() - l1p1.x())) / denominator;
++
++      intersection.setX(l1p1.x() + t * (l1p2.x() - l1p1.x()));
++      intersection.setY(l1p1.y() + t * (l1p2.y() - l1p1.y()));
++      return intersection;
++  }
++
++  if (o1 == 0 && isSegment(l1p1, l2p1, l1p2)) {
++      intersection = l2p1;
++      return intersection;
++  }
++  if (o2 == 0 && isSegment(l1p1, l2p2, l1p2)) {
++      intersection = l2p2;
++      return intersection;
++  }
++  if (o3 == 0 && isSegment(l2p1, l1p1, l2p2)) {
++      intersection = l1p1;
++      return intersection;
++  }
++  if (o4 == 0 && isSegment(l2p1, l1p2, l2p2)) {
++      intersection = l1p2;
++      return intersection;
++  }
++
++  return {};
++}
+diff --git a/geometry2d.h b/geometry2d.h
+index 930a3d3..a5ba36a 100644
+--- a/geometry2d.h
++++ b/geometry2d.h
+@@ -5,6 +5,12 @@
+ 
+ namespace geometry2d {
+ 
++// 
++
++// It's not very clear what is meant by arc. If it is a broken line, it is easier to implement a class based on the line class and store a vector of lines.
++// For an arc, it is better to use the approximation
++// For simple geometry, it is better to use simple shapes from which you can create more complex ones
++// Example: enum ShapeType { POINT, LINE, TRIANGLE, RECT }
+ enum ShapeType { POINT, LINE, ARC, BOX };
+ 
+ class Shape {
+@@ -12,21 +18,38 @@ class Shape {
+   virtual ShapeType type() = 0;
+ };
+ 
++// Splitting one file into several for each form
++
++// Example of implementation for the Point class 
++
++// Default constructor
+ class Point : public Shape {
+- public:
++public:
++  Point();
++
+   explicit Point(double x, double y);
++// const method
+   ShapeType type() override;
+ 
+-  double x = 0.;
+-  double y = 0.;
++// Getter and setter
++  double x() const;
++  void setX(const double x);
++  double y() const;
++  void setY(const double y);
++// Private
++private:
++  double m_x = 0.;
++  double m_y = 0.;
+ };
+ 
+ class LineSegment : public Shape {
+- public:
++public:
+   explicit LineSegment(Point p1, Point p2);
++// const method
+   ShapeType type() override;
+ 
+-  double slope() const;
++  // Unused method
++  //double slope() const;
+ 
+   Point p1;
+   Point p2;
+@@ -35,21 +58,28 @@ class LineSegment : public Shape {
+ class Arc : public Shape {
+  public:
+   explicit Arc(Point c, Point p1, Point p2);
++// const method
+   ShapeType type() override;
+ 
++// Getter and setter
++// Private
++
+   Point c;
+   Point p1;
+   Point p2;
+ };
+ 
+ class BoundingBox : public Shape {
+- public:
++public:
+   ShapeType type() override;
+ 
+   void add(Point p);
+   void add(LineSegment line);
+   void add(Arc arc);
+ 
++// Getter and setter
++// Private
++
+   Point p1;
+   Point p2;
+ };
+@@ -68,6 +98,8 @@ class GeometryFactory : public IGeometryFactory {
+   Shape* createShape(Point c, Point p1, Point p2) const override;
+ };
+ 
++// Separate the methods into a separate file geometry_utils.h e.g.
++
+ std::vector<Shape*> readGeometry(const IGeometryFactory* factory,
+                                  std::istream& stream);
+ 
+@@ -76,12 +108,34 @@ std::vector<Shape*> readGeometry(const IGeometryFactory* factory,
+ 
+ Point centroid(const std::vector<Shape*>& shapes);
+ 
+-class Intersect {
+- public:
+-  static Point* intersect(LineSegment l1, LineSegment l2);
+-  static Point* intersect(LineSegment segment, Arc arc);
+-  static Point* intersect(Point p, LineSegment l);
+-  static Point* intersect(Point p, Arc l);
++// Template implementation may be or create interface?
++// Implementation of hide in private methods
++// class Intersect {
++//  public:
++//   static Point* intersect(LineSegment l1, LineSegment l2);
++//   static Point* intersect(LineSegment segment, Arc arc);
++//   static Point* intersect(Point p, LineSegment l);
++//   static Point* intersect(Point p, Arc l);
++// };
++
++// Example for lines
++class Intersect 
++{
++public:
++  virtual Point intersect(Shape *s1, Shape *s2) = 0;
++};
++
++class IntersectLineSegment : public Intersect
++{
++public:
++  Point intersect(Shape *s1, Shape *s2) override;
++
++private:
++  int orientation(Point p, Point q, Point r);
++
++  bool isSegment(Point p, Point q, Point r);
++
++  Point intersectOnSegments(Point p1, Point q1, Point p2, Point q2);
+ };
+ 
+ }  // namespace geometry2d
+diff --git a/main.cpp b/main.cpp
+index 05746f4..c0b4e8e 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -1,5 +1,17 @@
+ #include <iostream>
++#include "geometry2d.h"
++
++int main(int argc, char** argv) {
++  const std::filesystem::path dataPath = std::string(APP_SOURCE_DIR) + "/data.txt";
++
++  if (std::filesystem::exists(dataPath)) {
++    geometry2d::GeometryFactory factory2d;
++    const auto shapes = geometry2d::readGeometry(&factory2d, dataPath);
++    const auto centroid = geometry2d::centroid(shapes); 
++    std::cout << "\tCENTROID\n"
++              << "\tX: " << centroid.x() << std::endl
++              << "\tY: " << centroid.y() << std::endl;
++  }
+ 
+-int main(int argc, char** argv){
+   return 0;
+ }
